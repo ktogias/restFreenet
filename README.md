@@ -1,0 +1,2 @@
+# restFreenet
+Freenet Rest plugin
