@@ -3,6 +3,7 @@
 This plugin exposes freenet functions via a REST API.
  
 The API is accessible under http://<freenet host>:<freenet port>/rest/
+
 Currently the following functions are supported:
  - Generation of SSK or USK key pair: 
       GET http://{freenet host}:{freenet port}/rest/keygen/{keytype}[?filename={filename}&version={version}]
