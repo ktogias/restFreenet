@@ -33,17 +33,18 @@ import freenet.pluginmanager.*;
  * 
  * @author Konstantinos Togias <info@ktogias.gr>
  */
-public class RestFreenet implements FredPlugin {
+public class RestFreenet implements FredPlugin, FredPluginThreadless {
         private volatile boolean goon = true; //A boolean for main loop. When false plugin main loop is stopped.
 	PluginRespirator pr; //The PluginRespirator object provided when runPlugin method is called.
-        String basePath = "/rest/"; //The base path under which the pugin is accessed. 
+        final static String basePath = "/rest/"; //The base path under which the pugin is accessed. 
 
         /**
          * Implementation of terminate method. 
          * We just do goon false so the main loop exists.
          */
+        @Override
 	public void terminate() {
-		goon = false;
+            
 	}
 
         /**
@@ -51,22 +52,12 @@ public class RestFreenet implements FredPlugin {
          * This method runs when the plugin is enabled.
          * @param pr PluginRespirator : The PluginRespirator object
          */
+        @Override
 	public void runPlugin(PluginRespirator pr) {
 		this.pr = pr;
                 ToadletContainer tc = pr.getToadletContainer(); //Get the container
                 RestToadlet rt = new RestToadlet(basePath, pr.getHLSimpleClient(), pr.getNode()); //Create the Toadlet that handles the HTTP requests
                 tc.register(rt, null, rt.path(), true, false); //Resgister the Toadlet to the container
-                /* This loop needs to constantly 
-                 * run for the plugin to be listed in loaded plugins list 
-                 * in the plugins page 
-                 */
-                while(goon) {
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				// Who cares ?
-			}
-		}
 	}
 	
 }

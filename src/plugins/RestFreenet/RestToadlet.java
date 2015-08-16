@@ -302,7 +302,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     private Map<String,String> getInsertParamsFromUri(URI uri) throws Exception{
         try {
             Map<String,String> params = new HashMap();
-            String uriString = uri.toString().split("\\?")[0];
+            String uriString = uri.getPath();
             String[] uriParts = uriString.split("/");
             params.put("action", uriParts[2]);
             params.put("key", uriParts[3]+"/");
@@ -333,7 +333,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     private Map<String,String> getKeygenParamsFromUri(URI uri) throws Exception{
         try {
             Map<String,String> params = new HashMap();
-            String uriString = uri.toString().split("\\?")[0];
+            String uriString = uri.getPath();
             String[] uriParts = uriString.split("/");
             params.put("action", uriParts[2]);
             params.put("keytype", uriParts[3].toUpperCase());
