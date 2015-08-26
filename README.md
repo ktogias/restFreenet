@@ -27,7 +27,7 @@ Currently the following functions are supported:
 
       If realtime boolean value is provided realtime for insert is set respectively. Default is false. 
 
-      Returns 200 response with no data on success, or an error code with text error description on failure.
+      Returns 200 response with a json object containing the request URI of inserted data on success, or an error code with text error description on failure.
 
       e.g. POST http://localhost:8888/rest/insert/USK@GHe[...]PO/HelloWorld.txt/0?priority=1&realtime=0
   
