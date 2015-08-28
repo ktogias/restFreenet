@@ -34,7 +34,6 @@ import freenet.pluginmanager.*;
  * @author Konstantinos Togias <info@ktogias.gr>
  */
 public class RestFreenet implements FredPlugin, FredPluginThreadless {
-        private volatile boolean goon = true; //A boolean for main loop. When false plugin main loop is stopped.
 	PluginRespirator pr; //The PluginRespirator object provided when runPlugin method is called.
         final static String basePath = "/rest/"; //The base path under which the pugin is accessed. 
 
