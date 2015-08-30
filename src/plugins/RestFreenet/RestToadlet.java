@@ -182,24 +182,19 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             }
 
             InsertStatusCallback callback = insert(key, filename, contenttype, data, priority, realtime, tc);
-            /**
-             * Wait until the insert either succeeds, fails or gets canceled and then send back the corresponding reply
-             */
-            while (!callback.succeed() && !callback.failed() && !callback.canceled()){
-                Thread.sleep(1000);
-            }
-            if (callback.succeed()){
+            int status = callback.getStatus();
+            if (status == InsertStatusCallback.STATUS_SUCCESS){
                 /*Create the json object with the URI pair to return*/
                 JSONObject response = new JSONObject();
                 response.put("requestURI", callback.getInsertedURI().toString());
                 /*Send the reply*/
                 writeReply(tc, 200, "application/json", "", response.toJSONString());
             }
-            else if (callback.failed()){
+            else if (status == InsertStatusCallback.STATUS_FAILURE){
                 /*Send the reply*/
                 writeReply(tc, 500, "text/plain", "", "Insert failed "+callback.getInsertException().toString());
             }
-            else if (callback.canceled()){
+            else if (status == InsertStatusCallback.STATUS_CANCELLED ){
                 /*Send the reply*/
                 writeReply(tc, 500, "text/plain", "", "Insert was cancelled");
             }
@@ -476,12 +471,15 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      * It gets notified when the insert proccess is finished either with success or with failure
      */
     private class InsertStatusCallback implements ClientPutCallback, RequestClient {
+        public static final int STATUS_SUCCESS = 0;
+        public static final int STATUS_FAILURE = 1;
+        public static final int STATUS_CANCELLED = 2;
+        final Lock lock = new ReentrantLock();
+        final Condition finished = lock.newCondition();
         private final ToadletContext tc;
         private final RandomAccessBucket bucket;
         private ClientPutter clientPutter;
-        private boolean success;
-        private boolean failure;
-        private boolean canceled;
+        private int status;
         private InsertException ie;
         private final boolean realtime;
         private FreenetURI insertedURI;
@@ -497,9 +495,6 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             this.tc = tc;
             this.bucket = bucket;
             this.realtime = realtime;
-            this.success = false;
-            this.failure = false;
-            this.canceled = false;
         }
         
         /**
@@ -517,38 +512,18 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * When called the onging insert is cancelled and rhe bucket is destroyed 
          */
         public void cancel() {
+            lock.lock();
+            try {
                 clientPutter.cancel(node.clientCore.clientContext);
                 bucket.free();
-                canceled = true;
+                status = STATUS_CANCELLED;
+                finished.signalAll();
+            }
+            finally{
+                lock.unlock();
+            }
         }
-        
-        /**
-         * Returns true if the insert has been completed with success, false otherwise
-         * 
-         * @return boolen
-         */
-        public boolean succeed(){
-            return success;
-        }
-        
-        /**
-         * Returns true if the insert has been completed with failure, false otherwise
-         * 
-         * @return boolen
-         */
-        public boolean failed(){
-            return failure;
-        }
-        
-        /**
-         * Returns true if the insert has been cancelled, false otherwise
-         * 
-         * @return boolen
-         */
-        public boolean canceled(){
-            return canceled;
-        }
-        
+             
         /**
          * Returns the Exception thrown from a failed insert process
          * 
@@ -596,9 +571,16 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param bcp BaseClientPutter : The ClientPutter object
          */
         public void onSuccess(BaseClientPutter bcp) {
-            success = true;
-            insertedURI = bcp.getURI();
-            bucket.free();
+            lock.lock();
+            try{
+                status = STATUS_SUCCESS;
+                insertedURI = bcp.getURI();
+                bucket.free();
+                finished.signalAll();
+            }
+            finally{
+                lock.unlock();
+            }
         }
 
         /**
@@ -608,9 +590,16 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param bcp BaseClientPutter : The ClientPutter object
          */
         public void onFailure(InsertException ie, BaseClientPutter bcp) {
-            failure = true;
-            bucket.free();
-            this.ie = ie;
+            lock.lock();
+            try{
+                status = STATUS_FAILURE;
+                bucket.free();
+                this.ie = ie;
+                finished.signalAll();
+            }
+            finally{
+                lock.unlock();
+            }
         }
 
         /**
@@ -652,12 +641,30 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         }
         
         /**
+         * Returns the status of the insertion
+         * 
+         * @return int
+         */
+        public int getStatus() throws InterruptedException{
+            lock.lock();
+            try{
+                finished.await();
+                return status;
+            }
+            finally{
+                lock.unlock();
+            }
+        }
+        
+        /**
          * Returns the URI of the inserted data after insert success
          * 
          * @return FreenetURI
          */
-        public FreenetURI getInsertedURI(){
+        public FreenetURI getInsertedURI() throws InterruptedException{
+            
             return insertedURI;
+           
         }
         
     }
@@ -672,7 +679,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             lock.lock();
             try {
                 message = fcppm;
-                finished.signal();
+                finished.signalAll();
                 return FCPPluginMessage.construct();
             }
             finally {
