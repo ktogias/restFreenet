@@ -9,6 +9,8 @@ import freenet.client.async.BaseClientPutter;
 import freenet.client.async.ClientContext;
 import freenet.client.async.ClientPutCallback;
 import freenet.client.async.ClientPutter;
+import freenet.clients.fcp.FCPPluginConnection;
+import freenet.clients.fcp.FCPPluginMessage;
 import freenet.clients.http.LinkEnabledCallback;
 import freenet.clients.http.RedirectException;
 import freenet.clients.http.Toadlet;
@@ -20,6 +22,10 @@ import freenet.keys.InsertableClientSSK;
 import freenet.node.Node;
 import freenet.node.RequestClient;
 import freenet.node.RequestStarter;
+import freenet.pluginmanager.FredPluginFCPMessageHandler.ClientSideFCPMessageHandler;
+import freenet.pluginmanager.PluginNotFoundException;
+import freenet.pluginmanager.PluginRespirator;
+import freenet.support.SimpleFieldSet;
 import freenet.support.api.Bucket;
 import freenet.support.api.HTTPRequest;
 import java.io.IOException;
@@ -31,8 +37,14 @@ import freenet.support.io.ArrayBucket;
 import freenet.support.io.ResumeFailedException;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
 /**
  * The Toadlet class
@@ -42,6 +54,8 @@ import java.util.Map;
  */
 public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     protected String path; //The url path under witch the Toadlet is accessed
+    protected PluginRespirator pr;
+    protected String indynetPluginName;
     protected HighLevelSimpleClient client;
     protected Node node;
 
@@ -49,14 +63,17 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      * Class Constructor
      * 
      * @param path String : The url path under witch the Toadlet is accessed
-     * @param client HighLevelSimpleClient
-     * @param node Node
+     * @param indynetPluginName String : The name of indynet plugin
+     * @param pr PluginRespirator : The plugin respirator
+     *
      */
-    public RestToadlet(String path, HighLevelSimpleClient client, Node node) {
-        super(client);
+    public RestToadlet(String path, String indynetPluginName, PluginRespirator pr) {
+        super(pr.getHLSimpleClient());
         this.path = path;
-        this.client = client;
-        this.node = node;
+        this.pr = pr;
+        this.indynetPluginName = indynetPluginName;
+        this.client = pr.getHLSimpleClient();
+        this.node = pr.getNode();
     }
     
     /**
@@ -118,6 +135,13 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
                     handleInsert(uri, httpr, tc);
                 } catch (Exception ie){
                     writeReply(tc, 500, "text/plain", "error", "Server error: "+ie.toString());
+                }
+            }
+            else if (action.equalsIgnoreCase("regname")){
+                try {
+                    handleRegName(uri, httpr, tc);
+                } catch (Exception kre){ 
+                    writeReply(tc, 500, "text/plain", "error", "Server error: "+kre.toString());
                 }
             }
             else {
@@ -418,6 +442,35 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         return key;
     }
     
+    private void handleRegName(URI uri, HTTPRequest httpr, ToadletContext tc) throws PluginNotFoundException, IOException, ToadletContextClosedException, InterruptedException {
+        JSONParser parser = new JSONParser();
+        try {
+            JSONObject content = (JSONObject)parser.parse(new InputStreamReader(httpr.getRawData().getInputStream(), "UTF-8"));
+            FCPPluginMessage message = regName((String)content.get("name"), (String)content.get("requestKey"));
+            if (message.success){
+                writeReply(tc, 200, "text/plain", "OK", "");
+            }
+            else {
+                writeReply(tc, 500, "text/plain", "Error", "Error: "+message.errorCode+" "+message.errorMessage);
+            }
+            
+        } catch (ParseException ex) {
+            writeReply(tc, 400, "text/plain", "Bad Request", "JSON content decoding error "+ex.toString());
+        }
+    }
+    
+    private FCPPluginMessage regName(String name, String requestKey) throws PluginNotFoundException, IOException, InterruptedException{
+        IndynetClientCallback callback = new IndynetClientCallback();
+        FCPPluginConnection connection = pr.connectToOtherPlugin(indynetPluginName, callback);
+        SimpleFieldSet params = new SimpleFieldSet(false);
+        params.putSingle("action", "resolver.register");
+        params.putSingle("name", name);
+        params.putSingle("requestKey", requestKey);
+        FCPPluginMessage message = FCPPluginMessage.construct(params, null);
+        connection.send(message);
+        return callback.getReturnedMessage();
+    }
+    
     /**
      * InsertStatusCallback is an implementation of ClientPutCallback. 
      * It gets notified when the insert proccess is finished either with success or with failure
@@ -607,5 +660,36 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             return insertedURI;
         }
         
+    }
+    
+    private class IndynetClientCallback implements ClientSideFCPMessageHandler {
+
+        final Lock lock = new ReentrantLock();
+        final Condition finished = lock.newCondition();
+        FCPPluginMessage message = null;
+        
+        public FCPPluginMessage handlePluginFCPMessage(FCPPluginConnection fcppc, FCPPluginMessage fcppm) {
+            lock.lock();
+            try {
+                message = fcppm;
+                finished.signal();
+                return FCPPluginMessage.construct();
+            }
+            finally {
+                lock.unlock();
+            }
+        }
+        
+        public FCPPluginMessage getReturnedMessage() throws InterruptedException{
+            lock.lock();
+            try {
+                finished.await();
+                return message;
+            }
+            finally {
+                lock.unlock();
+            }
+        }
+                
     }
 }

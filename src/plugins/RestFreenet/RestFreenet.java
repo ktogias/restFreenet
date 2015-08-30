@@ -35,8 +35,9 @@ import freenet.pluginmanager.*;
  */
 public class RestFreenet implements FredPlugin, FredPluginThreadless {
 	PluginRespirator pr; //The PluginRespirator object provided when runPlugin method is called.
-        final static String basePath = "/rest/"; //The base path under which the pugin is accessed. 
-
+        final static String BASEPATH = "/rest/"; //The base path under which the pugin is accessed. 
+        final static String INDYNET_PLUGIN_NAME = "plugins.Indynet.Indynet";
+        
         /**
          * Implementation of terminate method. 
          * We just do goon false so the main loop exists.
@@ -55,7 +56,7 @@ public class RestFreenet implements FredPlugin, FredPluginThreadless {
 	public void runPlugin(PluginRespirator pr) {
 		this.pr = pr;
                 ToadletContainer tc = pr.getToadletContainer(); //Get the container
-                RestToadlet rt = new RestToadlet(basePath, pr.getHLSimpleClient(), pr.getNode()); //Create the Toadlet that handles the HTTP requests
+                RestToadlet rt = new RestToadlet(BASEPATH, INDYNET_PLUGIN_NAME, pr); //Create the Toadlet that handles the HTTP requests
                 tc.register(rt, null, rt.path(), true, false); //Resgister the Toadlet to the container
 	}
 	
