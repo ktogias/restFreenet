@@ -81,6 +81,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      * 
      * @return String 
      */
+    @Override
     public String path() {
             return path;
     }
@@ -98,23 +99,24 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      */
     @Override
     public void handleMethodGET(URI uri, HTTPRequest httpr, ToadletContext tc) throws ToadletContextClosedException, IOException, RedirectException {
+        String action;
         try {
-            String action = getActionFromUri(uri);
+            action = getActionFromUri(uri);
+        }
+        catch (Exception ex) {
+            writeReply(tc, 400, "text/plain", "error", "Bad request");
+            return;
+        }
+        try {
             if (action.equalsIgnoreCase("keygen")){
-                try {
-                    handleKeygen(uri, httpr, tc);
-                } catch (Exception kge){ 
-                    writeReply(tc, 500, "text/plain", "error", "Server error: "+kge.toString());
-                } 
+                handleKeygen(uri, httpr, tc);
             }
             else {
                 writeReply(tc, 405, "text/plain", "error", "Requested action is not supported");
             }
-        }
-        catch (Exception ex) {
-            writeReply(tc, 400, "text/plain", "error", "Bad request");
-            throw new UnsupportedOperationException("RestToadlet: error ="+ex.toString()+".");
-        }
+        } catch (Exception e){ 
+            writeReply(tc, 500, "text/plain", "error", "Server error: "+e.toString());
+        }  
     }
     
     /**
@@ -128,28 +130,25 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      * @throws RedirectException 
      */
     public void handleMethodPOST(URI uri, HTTPRequest httpr, ToadletContext tc) throws ToadletContextClosedException, IOException, RedirectException{
+        String action;
         try {
-            String action = getActionFromUri(uri);
+            action = getActionFromUri(uri);
+        } catch (Exception ex) {
+            writeReply(tc, 400, "text/plain", "error", "Bad request");
+            return;
+        }
+        try {
             if (action.equalsIgnoreCase("insert")){
-                try {
-                    handleInsert(uri, httpr, tc);
-                } catch (Exception ie){
-                    writeReply(tc, 500, "text/plain", "error", "Server error: "+ie.toString());
-                }
+                handleInsert(uri, httpr, tc);
             }
             else if (action.equalsIgnoreCase("regname")){
-                try {
-                    handleRegName(uri, httpr, tc);
-                } catch (Exception kre){ 
-                    writeReply(tc, 500, "text/plain", "error", "Server error: "+kre.toString());
-                }
+                handleRegName(uri, httpr, tc);
             }
             else {
                 writeReply(tc, 405, "text/plain", "error", "Requested action is not supported");
             }
-        } catch (Exception ex) {
-            writeReply(tc, 400, "text/plain", "error", "Bad request");
-            throw new UnsupportedOperationException("RestToadlet: error ="+ex.toString()+".");
+        } catch (Exception e){
+            writeReply(tc, 500, "text/plain", "error", "Server error: "+e.toString());
         }
     }
     
@@ -271,6 +270,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
      * @param tc ToadletContext : The Context object
      * @return boolean
      */
+    @Override
     public boolean isEnabled(ToadletContext tc) {
         return true;
     }
@@ -540,6 +540,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param furi FreenetURI : The inserted URI
          * @param bcp BaseClientPutter : The ClientPutter object
          */
+        @Override
         public void onGeneratedURI(FreenetURI furi, BaseClientPutter bcp) {
             //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
@@ -551,6 +552,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param bucket Bucket : The Bucket to be inserted
          * @param bcp BaseClientPutter : The ClientPutter object
          */
+        @Override
         public void onGeneratedMetadata(Bucket bucket, BaseClientPutter bcp) {
             //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
@@ -561,6 +563,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * 
          * @param bcp BaseClientPutter : The ClientPutter object
          */
+        @Override
         public void onFetchable(BaseClientPutter bcp) {
             //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
@@ -570,6 +573,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * 
          * @param bcp BaseClientPutter : The ClientPutter object
          */
+        @Override
         public void onSuccess(BaseClientPutter bcp) {
             lock.lock();
             try{
@@ -589,6 +593,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param ie InsertException : The generated Exception
          * @param bcp BaseClientPutter : The ClientPutter object
          */
+        @Override
         public void onFailure(InsertException ie, BaseClientPutter bcp) {
             lock.lock();
             try{
@@ -609,6 +614,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * @param cc The Context object
          * @throws ResumeFailedException 
          */
+        @Override
         public void onResume(ClientContext cc) throws ResumeFailedException {
             //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
         }
@@ -618,6 +624,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * 
          * @return RequestClient
          */
+        @Override
         public RequestClient getRequestClient() {
             return this;
         }
@@ -627,6 +634,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * 
          * @return boolean
          */
+        @Override
         public boolean persistent() {
             return false;
         }
@@ -636,6 +644,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
          * 
          * @return boolean 
          */
+        @Override
         public boolean realTimeFlag() {
             return realtime;
         }
@@ -675,6 +684,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         final Condition finished = lock.newCondition();
         FCPPluginMessage message = null;
         
+        @Override
         public FCPPluginMessage handlePluginFCPMessage(FCPPluginConnection fcppc, FCPPluginMessage fcppm) {
             lock.lock();
             try {
