@@ -111,6 +111,9 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             if (action.equalsIgnoreCase("keygen")){
                 handleKeygen(uri, httpr, tc);
             }
+            else if (action.equalsIgnoreCase("resname")){
+                handleResname(uri, httpr, tc);
+            }
             else {
                 writeReply(tc, 405, "text/plain", "error", "Requested action is not supported");
             }
@@ -443,7 +446,9 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             JSONObject content = (JSONObject)parser.parse(new InputStreamReader(httpr.getRawData().getInputStream(), "UTF-8"));
             FCPPluginMessage message = regName((String)content.get("name"), (String)content.get("requestKey"));
             if (message.success){
-                writeReply(tc, 200, "text/plain", "OK", "");
+                JSONObject response = new JSONObject();
+                response.put("resolveURI", message.params.get("resolveURI"));
+                writeReply(tc, 200, "application/json", "OK", response.toJSONString());
             }
             else {
                 writeReply(tc, 500, "text/plain", "Error", "Error: "+message.errorCode+" "+message.errorMessage);
@@ -464,6 +469,52 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         FCPPluginMessage message = FCPPluginMessage.construct(params, null);
         connection.send(message);
         return callback.getReturnedMessage();
+    }
+    
+    public void handleResname(URI uri, HTTPRequest httpr, ToadletContext tc) throws Exception{
+        try {
+            String requestKey;
+            
+            Map<String,String> params = getResnameParamsFromUri(uri);
+            String name = params.get("name");
+            try {
+                FCPPluginMessage message = resName(name);            
+                /*Create the json object with the URI pair to return*/
+                if (message.success){
+                    /*Send the reply*/
+                    writeReply(tc, 200, "application/json", "", message.params.get("json"));
+                }
+                else {
+                    writeReply(tc, 500, "text/plain", "Error", "Error: "+message.errorCode+" "+message.errorMessage);
+                }
+            }
+            catch (Exception e){
+                writeReply(tc, 500, "text/plain", "Server Error", e.toString());
+            }
+        }
+        catch (Exception ex){
+            writeReply(tc, 400, "text/plain", "Bad Request", ex.toString());
+        }        
+    }
+    
+    private FCPPluginMessage resName(String name) throws PluginNotFoundException, IOException, InterruptedException{
+        IndynetClientCallback callback = new IndynetClientCallback();
+        FCPPluginConnection connection = pr.connectToOtherPlugin(indynetPluginName, callback);
+        SimpleFieldSet params = new SimpleFieldSet(false);
+        params.putSingle("action", "resolver.resolve");
+        params.putSingle("name", name);
+        FCPPluginMessage message = FCPPluginMessage.construct(params, null);
+        connection.send(message);
+        return callback.getReturnedMessage();
+    }
+    
+    private Map<String,String> getResnameParamsFromUri(URI uri) throws Exception, NullPointerException{
+        Map<String,String> params = new HashMap();
+        String uriString = uri.getPath();
+        String[] uriParts = uriString.split("/");
+        params.put("action", uriParts[2]);
+        params.put("name", uriParts[3].toLowerCase());
+        return params;
     }
     
     /**
