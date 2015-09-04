@@ -25,6 +25,7 @@ import freenet.node.RequestStarter;
 import freenet.pluginmanager.FredPluginFCPMessageHandler.ClientSideFCPMessageHandler;
 import freenet.pluginmanager.PluginNotFoundException;
 import freenet.pluginmanager.PluginRespirator;
+import freenet.support.MultiValueTable;
 import freenet.support.SimpleFieldSet;
 import freenet.support.api.Bucket;
 import freenet.support.api.HTTPRequest;
@@ -38,7 +39,9 @@ import freenet.support.io.ResumeFailedException;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -56,24 +59,30 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     protected String path; //The url path under witch the Toadlet is accessed
     protected PluginRespirator pr;
     protected String indynetPluginName;
+    protected String wsfreentPluginName;
     protected HighLevelSimpleClient client;
     protected Node node;
+    protected JSONObject config;
 
     /**
      * Class Constructor
      * 
      * @param path String : The url path under witch the Toadlet is accessed
      * @param indynetPluginName String : The name of indynet plugin
+     * @param wsfreenetPluginName
+     * @param config
      * @param pr PluginRespirator : The plugin respirator
      *
      */
-    public RestToadlet(String path, String indynetPluginName, PluginRespirator pr) {
+    public RestToadlet(String path, String indynetPluginName, String wsfreenetPluginName, JSONObject config, PluginRespirator pr) {
         super(pr.getHLSimpleClient());
         this.path = path;
         this.pr = pr;
         this.indynetPluginName = indynetPluginName;
+        this.wsfreentPluginName = wsfreenetPluginName;
         this.client = pr.getHLSimpleClient();
         this.node = pr.getNode();
+        this.config = config;
     }
     
     /**
@@ -114,6 +123,12 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
             else if (action.equalsIgnoreCase("resname")){
                 handleResname(uri, httpr, tc);
             }
+            else if (action.equalsIgnoreCase("wsfreenetstatus")){
+                handleGetWSFreenetStatus(uri, httpr, tc);
+            }
+            else if (action.equalsIgnoreCase("status")){
+                writeReply(tc, 200, "text/plain", "OK", "OK");
+            }
             else {
                 writeReply(tc, 405, "text/plain", "error", "Requested action is not supported");
             }
@@ -153,6 +168,17 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         } catch (Exception e){
             writeReply(tc, 500, "text/plain", "error", "Server error: "+e.toString());
         }
+    }
+    
+    @Override
+    protected void writeReply(ToadletContext tc, int code, String mimeType, String desc, String reply) throws ToadletContextClosedException, IOException{
+        MultiValueTable<String, String> headers = tc.getHeaders();
+        headers.remove("content-length");
+        String origin = (String)config.getOrDefault("Access-Control-Allow-Origin", null);
+        if (origin != null){
+            headers.put("Access-Control-Allow-Origin", origin);
+        }
+        super.writeReply(tc, code, mimeType, desc, headers, reply);
     }
     
     /**
@@ -460,7 +486,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     }
     
     private FCPPluginMessage regName(String name, String requestKey) throws PluginNotFoundException, IOException, InterruptedException{
-        IndynetClientCallback callback = new IndynetClientCallback();
+        FCPMessageClientCallback callback = new FCPMessageClientCallback();
         FCPPluginConnection connection = pr.connectToOtherPlugin(indynetPluginName, callback);
         SimpleFieldSet params = new SimpleFieldSet(false);
         params.putSingle("action", "resolver.register");
@@ -473,8 +499,6 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     
     public void handleResname(URI uri, HTTPRequest httpr, ToadletContext tc) throws Exception{
         try {
-            String requestKey;
-            
             Map<String,String> params = getResnameParamsFromUri(uri);
             String name = params.get("name");
             try {
@@ -498,11 +522,49 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
     }
     
     private FCPPluginMessage resName(String name) throws PluginNotFoundException, IOException, InterruptedException{
-        IndynetClientCallback callback = new IndynetClientCallback();
+        FCPMessageClientCallback callback = new FCPMessageClientCallback();
         FCPPluginConnection connection = pr.connectToOtherPlugin(indynetPluginName, callback);
         SimpleFieldSet params = new SimpleFieldSet(false);
         params.putSingle("action", "resolver.resolve");
         params.putSingle("name", name);
+        FCPPluginMessage message = FCPPluginMessage.construct(params, null);
+        connection.send(message);
+        return callback.getReturnedMessage();
+    }
+    
+    public void handleGetWSFreenetStatus(URI uri, HTTPRequest httpr, ToadletContext tc) throws Exception{
+        try {
+            try {
+                FCPPluginMessage message = getWSfreenetStatus();
+                /*Create the json object with the URI pair to return*/
+                if (message.success){
+                    /*Send the reply*/
+                    JSONObject reply = new JSONObject();
+                    Iterator<String> keyIterator = message.params.keyIterator();
+                    while (keyIterator.hasNext()){
+                        String key = keyIterator.next();
+                        reply.put(key, message.params.getString(key));
+                    }
+                    writeReply(tc, 200, "application/json", "", reply.toJSONString());
+                }
+                else {
+                    writeReply(tc, 500, "text/plain", "Error", "Error: "+message.errorCode+" "+message.errorMessage);
+                }
+            }
+            catch (Exception e){
+                writeReply(tc, 500, "text/plain", "Server Error", e.toString());
+            }
+        }
+        catch (Exception ex){
+            writeReply(tc, 400, "text/plain", "Bad Request", ex.toString());
+        }        
+    }
+    
+    private FCPPluginMessage getWSfreenetStatus() throws PluginNotFoundException, IOException, InterruptedException{
+        FCPMessageClientCallback callback = new FCPMessageClientCallback();
+        FCPPluginConnection connection = pr.connectToOtherPlugin(wsfreentPluginName, callback);
+        SimpleFieldSet params = new SimpleFieldSet(false);
+        params.putSingle("action", "getstatus");   
         FCPPluginMessage message = FCPPluginMessage.construct(params, null);
         connection.send(message);
         return callback.getReturnedMessage();
@@ -729,7 +791,7 @@ public class RestToadlet extends Toadlet implements LinkEnabledCallback{
         
     }
     
-    private class IndynetClientCallback implements ClientSideFCPMessageHandler {
+    private class FCPMessageClientCallback implements ClientSideFCPMessageHandler {
 
         final Lock lock = new ReentrantLock();
         final Condition finished = lock.newCondition();

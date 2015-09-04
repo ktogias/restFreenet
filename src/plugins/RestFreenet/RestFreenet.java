@@ -26,6 +26,14 @@
 package plugins.RestFreenet;
 import freenet.clients.http.ToadletContainer;
 import freenet.pluginmanager.*;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
 
 /**
@@ -37,6 +45,8 @@ public class RestFreenet implements FredPlugin, FredPluginThreadless {
 	PluginRespirator pr; //The PluginRespirator object provided when runPlugin method is called.
         final static String BASEPATH = "/rest/"; //The base path under which the pugin is accessed. 
         final static String INDYNET_PLUGIN_NAME = "plugins.Indynet.Indynet";
+        final static String WSFREENET_PLUGIN_NAME = "plugins.WSFreenet.WSFreenet";
+        final static String CONFIG_FILE = "restfreenet.config.json";
         
         /**
          * Implementation of terminate method. 
@@ -54,10 +64,23 @@ public class RestFreenet implements FredPlugin, FredPluginThreadless {
          */
         @Override
 	public void runPlugin(PluginRespirator pr) {
-		this.pr = pr;
+            try {
+                this.pr = pr;
                 ToadletContainer tc = pr.getToadletContainer(); //Get the container
-                RestToadlet rt = new RestToadlet(BASEPATH, INDYNET_PLUGIN_NAME, pr); //Create the Toadlet that handles the HTTP requests
+                JSONObject config = readJsonConfig();
+                RestToadlet rt = new RestToadlet(BASEPATH, INDYNET_PLUGIN_NAME, WSFREENET_PLUGIN_NAME, config, pr); //Create the Toadlet that handles the HTTP requests
                 tc.register(rt, null, rt.path(), true, false); //Resgister the Toadlet to the container
+            } catch (IOException ex) {
+                Logger.getLogger(RestFreenet.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (ParseException ex) {
+                Logger.getLogger(RestFreenet.class.getName()).log(Level.SEVERE, null, ex);
+            }
 	}
+        
+        private JSONObject readJsonConfig() throws FileNotFoundException, IOException, ParseException{
+            JSONParser parser = new JSONParser();
+            JSONObject config = (JSONObject) parser.parse(new FileReader(CONFIG_FILE));
+            return config;
+        }
 	
 }
