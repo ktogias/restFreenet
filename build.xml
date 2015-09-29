@@ -32,7 +32,7 @@
 		<!-- Create the build directory structure used by compile -->
 
 		<!-- FIXME: remove the debug and replace with optimize -->
-		<javac srcdir="src/" destdir="${build}" debug="on" optimize="on" source="${source-version}">
+		<javac srcdir="src/" destdir="${build}" debug="off" optimize="on" source="${source-version}" target="1.6">
 			<classpath>
                                 <pathelement location="${json-simple.location}"/>
 				<pathelement location="${freenet-ext.location}"/>
